@@ -532,6 +532,7 @@ function gwr ()
       echo "Enter number of the worktree to remove (will cd to dev first; Return or q to quit):"
       read _NUM
       if [[ ${_NUM}. = "." ]] || [[ ${_NUM}. = "q." ]]; then
+         LESS=${LESS_SAVE}
          return
       fi
       _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
