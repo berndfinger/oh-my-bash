@@ -338,7 +338,7 @@ alias gstu='gsta --include-untracked'
 
 alias gsb='command git status --short --branch'
 alias gss='command git status --short'
-alias gst='command git status'
+#alias gst='command git status'
 
 alias gsi='command git submodule init'
 alias gsu='command git submodule update'
@@ -371,6 +371,194 @@ alias gwta='command git worktree add'
 alias gwtls='command git worktree list'
 alias gwtmv='command git worktree move'
 alias gwtrm='command git worktree remove'
+
+alias gw='git worktree'
+
+function gst {
+   LESS_SAVE=${LESS}
+   unset LESS
+   echo "Remotes:"
+   git remote -v | awk '{printf ("%s\n", $0)}'
+   echo ""
+   echo "Branches:"
+   script -efq /tmp/output.log -c "git branch -av" | awk '{printf ("%s\n", $0)}' && rm -f /tmp/output.log
+   echo "Worktrees:"
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   echo ""
+   echo "Status:"
+   script -efq /tmp/output.log -c "git status" | awk '{printf ("%s\n", $0)}' && rm -f /tmp/output.log
+   echo ""
+   LESS=${LESS_SAVE}
+}
+
+# For the git worktree functions to work, the following needs to be prepared:
+# 0 - The git repo has a branch named "dev". This is its main development branch.
+# 1 - In your top level development directory (sample: ~/github), clone the repo as follows:
+#   $ _GIT_TOP_DIR=~/github
+#   $ _GIT_ORG=example-org
+#   $ _GIT_REPO=example-repo
+#   $ _DATE=$(date +%Y-%m-%d)
+#   $ cd ${_GIT_TOP_DIR}
+#   $ git clone -b dev git@github.com:${_GIT_ORG}/${_GIT_REPO}.git ${_GIT_REPO}-${_DATE}/dev
+#   This will create a new directory with the name of the repo plus a date (or any other) string
+#   and a subdirectory for the initial worktree, named dev.
+#   Note: The name of the new directory must be different from the repo name so that we can later use
+#   the name of the repo in the top level development directory as a link which points to the correct
+#   development directory of the repo.
+# 2 - In the directory which holds the dev directory, create a link with the name of the repo, pointing
+#   to the dev directory. The gwc function can modify this link to a diffent worktree.
+#   $ cd ${_GIT_TOP_DIR}/${_GIT_REPO}-${_DATE}
+#   $ ln -s dev ${_GIT_REPO}
+#   After that, the directory of the repo will have the following content:
+#   $ ls -l
+#   drwxr-xr-x. 1 user01 user01 252 Jan 12 12:00 dev
+#   lrwxrwxrwx. 1 user01 user01   3 Jan 12 12:00 example-repo -> dev
+# 3 - For using the repo as usual, create a link named like the repo, pointing to the correct subdirectory:
+#   $ cd ${_GIT_TOP_DIR}
+#   $ ln -s ${_GIT_REPO}-${_DATE}/${_GIT_REPO} ${_GIT_REPO}
+#   $ ls -l
+#   drwxr-xr-x. 1 user01 user01 252 Jan 12 12:00 example-repo -> example-repo-2024-01-12/example-repo
+#   lrwxrwxrwx. 1 user01 user01   3 Jan 12 12:00 example-repo-2024-01-12
+# 4 - Change the directory to the repo, verify that you are really in the correct subdirectory, and start your work:
+#   $ cd ${_GIT_REPO}
+#   $ pwd -P
+#   /home/user01/github/example-repo-2024-01-12/dev
+
+function gwl ()
+{
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Current repo: "
+   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Current branches:"
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   echo "Current worktrees:"
+   git worktree list | awk '{b=split ($1, a, "/"); printf ("%s/%s  %s %s\n", a[b-1], a[b], $(NF-1), $NF)}'
+   LESS=${LESS_SAVE}
+}
+
+# Attention: Before using the function gwa for adding a new worktree and branch, make sure your dev tree is clean.
+# Unlike when using "git branch -c", modified files will not be part of the new branch.
+function gwa ()
+{
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Current repo: "
+   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Current branches:"
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   echo
+   _WORKTREE=$1
+   if [[ ${_WORKTREE}. == "." ]]; then
+      echo "Enter the name of the worktree to create, based on dev (Return or q to quit):"
+      read _WORKTREE
+   fi
+   if [[ ${_WORKTREE}. != "." ]]; then
+      _DIR_REL=$(git status | awk '/On branch/{print $NF}')
+      _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
+      cd ${_CD_DIR}/../dev
+      echo "Press RETURN to create worktree and branch ${_WORKTREE}, based on dev:"
+      read a
+      git worktree add ../${_WORKTREE}
+      cd ../${_WORKTREE}
+# Now we must modify the link of the repo name to the new worktree:
+# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
+      cd ..
+      rm ${_REPO}
+      ln -s ${_WORKTREE} ${_REPO}
+      echo "Repo link in $(pwd) is now set to:"
+      ls -l ${_REPO}
+      cd ${_WORKTREE}
+      git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   fi
+   LESS=${LESS_SAVE}
+}
+
+function gwc ()
+{
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Current repo: "
+   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Current branches:"
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   echo
+   _ARG=$1
+   if [[ ${_ARG}. = "." ]]; then
+      echo "Enter number (Return or q to quit):"
+      read _NUM
+      if [[ ${_NUM}. = "." ]] || [[ ${_NUM}. = "q." ]]; then
+         LESS=${LESS_SAVE}
+         return
+      fi
+      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+      cd ../${_WORKTREE}
+   elif [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
+      _NUM=${_ARG}
+      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+      cd ../${_WORKTREE}
+   else
+      _WORKTREE=${_ARG}
+      cd ../${_WORKTREE}
+   fi
+# Now we must modify the link of the repo name to the new worktree:
+# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
+   _DIR_REL=$(git status | awk '/On branch/{print $NF}')
+   _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
+   cd ${_CD_DIR}/..
+   rm ${_REPO}
+   ln -s ${_WORKTREE} ${_REPO}
+   echo "Repo link in $(pwd) is now set to:"
+   ls -l ${_REPO}
+   cd ${_WORKTREE}
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   LESS=${LESS_SAVE}
+}
+
+function gwr ()
+{
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Current repo: "
+   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Current branches:"
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   _ARG=$1
+   if [[ ${_ARG}. = "." ]]; then
+      echo "Enter number of the worktree to remove (will cd to dev first; Return or q to quit):"
+      read _NUM
+      if [[ ${_NUM}. = "." ]] || [[ ${_NUM}. = "q." ]]; then
+         return
+      fi
+      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+   elif [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
+      _NUM=${_ARG}
+      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+   else
+      _WORKTREE=${_ARG}
+   fi
+   echo "Press RETURN to remove worktree and branch ${_WORKTREE} (will cd to dev first):"
+   read a
+# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
+   _DIR_REL=$(git status | awk '/On branch/{print $NF}')
+   _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
+   cd ${_CD_DIR}/../dev
+   git worktree remove ${_WORKTREE}
+   git branch -d ${_WORKTREE}
+   git branch -dr origin/${_WORKTREE}
+   cd ..
+   rm ${_REPO}
+   ln -s dev ${_REPO}
+   echo "Repo link in $(pwd) is now set to:"
+   ls -l ${_REPO}
+   cd dev
+   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   LESS=${LESS_SAVE}
+}
 
 alias gk='\gitk --all --branches'
 alias gke='\gitk --all $(git log --walk-reflogs --pretty=%h)'
