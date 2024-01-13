@@ -378,15 +378,15 @@ function gst {
    LESS_SAVE=${LESS}
    unset LESS
    echo "Remotes:"
-   git remote -v | awk '{printf ("%s\n", $0)}'
+   git remote -v
    echo ""
    echo "Branches:"
-   script -efq /tmp/output.log -c "git branch -av" | awk '{printf ("%s\n", $0)}' && rm -f /tmp/output.log
+   git branch -av
    echo "Worktrees:"
    git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
    echo ""
    echo "Status:"
-   script -efq /tmp/output.log -c "git status" | awk '{printf ("%s\n", $0)}' && rm -f /tmp/output.log
+   git status
    echo ""
    LESS=${LESS_SAVE}
 }
