@@ -374,6 +374,13 @@ alias gwtrm='command git worktree remove'
 
 alias gw='git worktree'
 
+# gwbr: Display the local branches and mark the active ones with "<---" at the end of the line. Also add numbers in front
+#       of each line which has a worktree assigned.
+function gwbr {
+   git branch | awk 'NF!=2{printf ("    %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("  %1s %s <---\n", n, $0)}; if ($1!="*"){printf ("  %1s %s\n", n, $0)}}'
+}
+
+# gst  Display git status information from various git commands
 function gst {
    LESS_SAVE=${LESS}
    unset LESS
@@ -383,7 +390,7 @@ function gst {
    echo "Branches:"
    git branch -av
    echo "Worktrees:"
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   gwbr
    echo ""
    echo "Status:"
    git status
@@ -392,7 +399,7 @@ function gst {
 }
 
 # For the git worktree functions to work, the following needs to be prepared:
-# 0 - The git repo has a branch named "dev". This is its main development branch.
+# 0 - The git repo has a branch named "dev" or another main intgration branch set in the variable INITIAL_BRANCH.
 # 1 - In your top level development directory (sample: ~/github), clone the repo as follows:
 #   $ _GIT_TOP_DIR=~/github
 #   $ _GIT_ORG=example-org
@@ -424,114 +431,209 @@ function gst {
 #   $ pwd -P
 #   /home/user01/github/example-repo-2024-01-12/dev
 
+# gwl: List all branches and worktrees. Branches with associated worktrees are displayed with a single digit number
+#      in the first column. The current worktree is marked with "<---" at the end of the line.
 function gwl ()
 {
    LESS_SAVE=${LESS}
    unset LESS
-   printf "Current repo: "
+   printf "Repo: "
    _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
    echo ${_REPO}
-   echo "Current branches:"
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
-   echo "Current worktrees:"
-   git worktree list | awk '{b=split ($1, a, "/"); printf ("%s/%s  %s %s\n", a[b-1], a[b], $(NF-1), $NF)}'
+   echo "Branches:"
+   gwbr
+   echo "Worktrees:"
+   git worktree list | awk '{b=split ($1, a, "/"); printf ("  %s/%s  %s %s\n", a[b-1], a[b], $(NF-1), $NF)}'
    LESS=${LESS_SAVE}
 }
 
-# Attention: Before using the function gwa for adding a new worktree and branch, make sure your dev tree is clean.
-# Unlike when using "git branch -c", modified files will not be part of the new branch.
-function gwa ()
+# Helper function for gwa and gwc, for creating a new worktree.
+function gwa_do ()
 {
-   LESS_SAVE=${LESS}
-   unset LESS
-   printf "Current repo: "
-   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
-   echo ${_REPO}
-   echo "Current branches:"
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
-   echo
+   INITIAL_BRANCH=${INITIAL_BRANCH:="dev"}
    _WORKTREE=$1
-   if [[ ${_WORKTREE}. == "." ]]; then
-      echo "Enter the name of the worktree to create, based on dev (Return or q to quit):"
-      read _WORKTREE
-   fi
-   if [[ ${_WORKTREE}. != "." ]]; then
-      _DIR_REL=$(git status | awk '/On branch/{print $NF}')
-      _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
-      cd ${_CD_DIR}/../dev
-      echo "Press RETURN to create worktree and branch ${_WORKTREE}, based on dev:"
-      read a
-      git worktree add ../${_WORKTREE}
-      cd ../${_WORKTREE}
-# Now we must modify the link of the repo name to the new worktree:
-# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
-      cd ..
-      rm ${_REPO}
-      ln -s ${_WORKTREE} ${_REPO}
-      echo "Repo link in $(pwd) is now set to:"
-      ls -l ${_REPO}
-      cd ${_WORKTREE}
-      git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
-   fi
-   LESS=${LESS_SAVE}
-}
-
-function gwc ()
-{
-   LESS_SAVE=${LESS}
-   unset LESS
-   printf "Current repo: "
-   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
-   echo ${_REPO}
-   echo "Current branches:"
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
-   echo
-   _ARG=$1
-   if [[ ${_ARG}. = "." ]]; then
-      echo "Enter number (Return or q to quit):"
-      read _NUM
-      if [[ ${_NUM}. = "." ]] || [[ ${_NUM}. = "q." ]]; then
-         LESS=${LESS_SAVE}
-         return
-      fi
-      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
-      cd ../${_WORKTREE}
-   elif [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
-      _NUM=${_ARG}
-      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
-      cd ../${_WORKTREE}
-   else
-      _WORKTREE=${_ARG}
-      cd ../${_WORKTREE}
-   fi
-# Now we must modify the link of the repo name to the new worktree:
-# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
    _DIR_REL=$(git status | awk '/On branch/{print $NF}')
    _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
+   cd ${_CD_DIR}/../${INITIAL_BRANCH}
+# Is there already a branch with the name of the new worktree? If yes, we create the worktree based on that branch.
+# If not, we create a new one.
+   _BRANCH=$(git branch | awk '$NF=="'${_WORKTREE}'"{print "'${_WORKTREE}'"}')
+   if [[ "${_BRANCH}." == "." ]]; then
+      echo "Press RETURN to create worktree and branch ${_WORKTREE}, based on ${INITIAL_BRANCH} (q to quit):"
+      read _ANSWER
+      if [[ "${_ANSWER}." == "q." ]]; then
+         return 2
+      fi
+      git worktree add ../${_WORKTREE}
+   else
+      echo "Press RETURN to create worktree to track branch ${_WORKTREE} (q to quit):"
+      read _ANSWER
+      if [[ "${_ANSWER}." == "q." ]]; then
+         return 2
+      fi
+      git worktree add ../${_WORKTREE} ${_WORKTREE}
+   fi
+}
+
+function gw_link ()
+{
+# Helper function for gwa and gwc, for modifying the link of the repo name to the correct worktree.
+# Attention: We need to be in the correct physical directory of the repo and then cd one level up.
+   INITIAL_BRANCH=${INITIAL_BRANCH:="dev"}
+   _DIR_REL=$(git status | awk '/On branch/{print $NF}')
+   _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
+   _WORKTREE=$1
    cd ${_CD_DIR}/..
    rm ${_REPO}
    ln -s ${_WORKTREE} ${_REPO}
-   echo "Repo link in $(pwd) is now set to:"
+   echo "Repo link in '$(pwd)' is now set to:"
    ls -l ${_REPO}
    cd ${_WORKTREE}
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   gwbr
+}
+
+# gwa: Add a new branch and its associated worktree.
+# Attention: Before using the function gwa for adding a new worktree and branch, make sure your dev tree is clean.
+# Unlike when using "git branch -c", modified files will not be part of the new branch. But after creating the new worktree,
+# you can copy files from the initial directory over to the new one.
+function gwa ()
+{
+   INITIAL_BRANCH=${INITIAL_BRANCH:="dev"}
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Repo: "
+   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Branches:"
+   gwbr
+   echo
+   _WORKTREE=$1
+   if [[ ${_WORKTREE}. == "." ]]; then
+      echo "Enter the name of the worktree to create, based on ${INITIAL_BRANCH} (RETURN or 'q' to quit):"
+      read _WORKTREE
+   fi
+   if [[ ${_WORKTREE}. != "." ]] && [[ ${_WORKTREE}. != "q." ]]; then
+      gwa_do ${_WORKTREE}
+      _RET=$?
+      if [[ ${_RET} != 2 ]]; then
+         gw_link ${_WORKTREE}
+      fi
+   fi
    LESS=${LESS_SAVE}
 }
 
-function gwr ()
+# gwc: Change the worktree, or create one. Without an argument, it displays the current branch and worktree and
+#      asks for the number or name of an existing worktree, or asks you to provide the name of a new worktree.
+#      You can skip this step by providing the number or name of an existing worktree, e.g. "gwc 1" or "gwc dev",
+#      or by providing the name of a new worktree. The new worktree can be either based on an existing branch,
+#      or it can be the name of a new worktree and branch. After the worktree has changed or has been created,
+#      the link to the repo is also changed to the directory of the new worktree, and finally all branches and
+#      worktrees are displayed with the new worktree being marked with "<---" at the end of the line.
+#      Attention: Mixing a a worktree environment with a non-worktree environment is not recommended. If you do
+#      so anyway, make sure you are in the main worktree (e.g. the dev worktree/branch) before creating a new
+#      worktree. Otherwise, the worktrees may no longer correspond to the branches with the same name.
+function gwc ()
 {
+   REMOTE_NAME=${REMOTE_NAME:="origin"}
+   INITIAL_BRANCH=${INITIAL_BRANCH:="dev"}
    LESS_SAVE=${LESS}
    unset LESS
-   printf "Current repo: "
-   _REPO=$(git remote -v | awk '/origin/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   printf "Repo: "
+   _REPO=$(git remote -v | awk '/'${REMOTE_NAME}'/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
    echo ${_REPO}
-   echo "Current branches:"
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   echo "Branches:"
+   gwbr
+   echo
    _ARG=$1
-   if [[ ${_ARG}. = "." ]]; then
-      echo "Enter number of the worktree to remove (will cd to dev first; Return or q to quit):"
+# No argument was provided -> request it:
+   if [[ ${_ARG}. == "." ]]; then
+      echo "Enter number or name of branch to change to, or name of branch to create (RETURN or 'q' to quit):"
       read _NUM
-      if [[ ${_NUM}. = "." ]] || [[ ${_NUM}. = "q." ]]; then
+      if [[ ${_NUM}. == "." ]] || [[ ${_NUM}. == "q." ]]; then
+         LESS=${LESS_SAVE}
+         return
+      fi
+# The argument is a number:
+      if [ ${_NUM} -eq ${_NUM} ] 2>/dev/null; then
+         _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+         if [[ "${_WORKTREE}." == "." ]]; then
+            echo "No worktree with number '${_NUM}'."
+            LESS=${LESS_SAVE}
+            return
+         fi
+         gw_link ${_WORKTREE}
+      else
+# The argument is a string:
+         _ARG=${_NUM}
+         _WORKTREE_TEST=$(git worktree list | awk '$NF=="['${_ARG}']"{print "'${_ARG}'"}')
+# There is no worktree with that name -> Create one:
+         if [[ "${_WORKTREE_TEST}." == "." ]]; then
+            _WORKTREE=${_ARG}
+            gwa_do ${_WORKTREE}
+            _RET=$?
+            if [[ ${_RET} != 2 ]]; then
+               gw_link ${_WORKTREE}
+            fi
+# There is already a worktree with that name -> Switch to it:
+         else
+            _WORKTREE=${_ARG}
+            cd ../${_WORKTREE}
+            gw_link ${_WORKTREE}
+         fi
+      fi
+# An argument was provided and it is a number:
+   elif [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
+      _NUM=${_ARG}
+      _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
+      if [[ "${_WORKTREE}." == "." ]]; then
+         echo "No worktree with number '${_NUM}'. Worktree not changed."
+         return
+      fi
+      gw_link ${_WORKTREE}
+# An argument was provided and it is a string:
+   else
+      _WORKTREE_TEST=$(git worktree list | awk '$NF=="['${_ARG}']"{print "'${_ARG}'"}')
+# There is no worktree with that name -> Create one:
+      if [[ "${_WORKTREE_TEST}." == "." ]]; then
+         _WORKTREE=${_ARG}
+         gwa_do ${_WORKTREE}
+         _RET=$?
+         if [[ ${_RET} != 2 ]]; then
+            gw_link ${_WORKTREE}
+         fi
+# There is already a worktree with that name -> Switch to it:
+      else
+         _WORKTREE=${_ARG}
+         cd ../${_WORKTREE}
+         gw_link ${_WORKTREE}
+      fi
+   fi
+   LESS=${LESS_SAVE}
+}
+
+# gwr: Remove a worktree. Without argument, it displays the current branch and worktree and asks for
+#      the number or name of an existing worktree to be removed. You can skip this step by providing
+#      the number or name of an existing worktree, e.g. "gwr 2" or "gwr issue-01". After the confirmation
+#      prompt has been confirmed (by pressing RETURN), the current worktree is first changed to the
+#      initial worktree (e.g. "dev") and then the worktree and its associated local and remote branches
+#      are removed. Finally, all branches and worktrees are displayed with the new initial worktree being
+#      marked with "<---" at the end of the line.
+function gwr ()
+{
+   REMOTE_NAME=${REMOTE_NAME:="origin"}
+   INITIAL_BRANCH=${INITIAL_BRANCH:="dev"}
+   LESS_SAVE=${LESS}
+   unset LESS
+   printf "Repo: "
+   _REPO=$(git remote -v | awk '/'${REMOTE_NAME}'/&&/fetch/{gsub ("\\.git", ""); b=split ($2, a, "/"); print a[2]}')
+   echo ${_REPO}
+   echo "Branches:"
+   gwbr
+   _ARG=$1
+   if [[ ${_ARG}. == "." ]]; then
+      echo "Enter number or name of the worktree to remove (will cd to '${INITIAL_BRANCH}' first; RETURN or 'q' to quit):"
+      read _NUM
+      if [[ ${_NUM}. == "." ]] || [[ ${_NUM}. == "q." ]]; then
          LESS=${LESS_SAVE}
          return
       fi
@@ -540,24 +642,32 @@ function gwr ()
       _NUM=${_ARG}
       _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
    else
-      _WORKTREE=${_ARG}
+      _WORKTREE=$(git worktree list | awk '$NF=="['${_ARG}']"{print "'${_ARG}'"}')
    fi
-   echo "Press RETURN to remove worktree and branch ${_WORKTREE} (will cd to dev first):"
-   read a
+   if [[ "${_WORKTREE}." == "." ]]; then
+      echo "No worktree with name or number '${_ARG}'."
+      gwbr
+      return
+   fi
+   echo "Press RETURN to remove worktree and branch '${_WORKTREE}' (will cd to '${INITIAL_BRANCH}' first):"
+   read _ANSWER
 # Attention: We need to be in the correct physical directory of the repo and then cd one level up.
    _DIR_REL=$(git status | awk '/On branch/{print $NF}')
    _CD_DIR=$(pwd -P | awk '{split($0, a, "'${_DIR_REL}'"); printf ("%s'${_DIR_REL}'\n", a[1], a[2])}')
-   cd ${_CD_DIR}/../dev
+   cd ${_CD_DIR}/../${INITIAL_BRANCH}
    git worktree remove ${_WORKTREE}
    git branch -d ${_WORKTREE}
-   git branch -dr origin/${_WORKTREE}
+   _REMOTE_BRANCH=$(git branch -r | awk '/'${REMOTE_NAME}'/&&/'${_WORKTREE}'/{print}')
+   if [[ "${_REMOTE_BRANCH}." != "." ]]; then
+      git branch -dr ${_REMOTE_BRANCH}
+   fi
    cd ..
    rm ${_REPO}
-   ln -s dev ${_REPO}
-   echo "Repo link in $(pwd) is now set to:"
+   ln -s ${INITIAL_BRANCH} ${_REPO}
+   echo "Repo link in '$(pwd)' is now set to:"
    ls -l ${_REPO}
-   cd dev
-   git branch | awk 'NF!=2{printf ("  %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("%1s %s <---\n", n, $0)}; if ($1!="*"){printf ("%1s %s\n", n, $0)}}'
+   cd ${INITIAL_BRANCH}
+   gwbr
    LESS=${LESS_SAVE}
 }
 
