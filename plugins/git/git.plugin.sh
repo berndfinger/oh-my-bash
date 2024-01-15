@@ -548,41 +548,14 @@ function gwc ()
 # No argument was provided -> request it:
    if [[ ${_ARG}. == "." ]]; then
       echo "Enter number or name of branch to change to, or name of branch to create (RETURN or 'q' to quit):"
-      read _NUM
-      if [[ ${_NUM}. == "." ]] || [[ ${_NUM}. == "q." ]]; then
+      read _ARG
+      if [[ ${_ARG}. == "." ]] || [[ ${_ARG}. == "q." ]]; then
          LESS=${LESS_SAVE}
          return
       fi
-# The argument is a number:
-      if [ ${_NUM} -eq ${_NUM} ] 2>/dev/null; then
-         _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
-         if [[ "${_WORKTREE}." == "." ]]; then
-            echo "No worktree with number '${_NUM}'."
-            LESS=${LESS_SAVE}
-            return
-         fi
-         gw_link ${_WORKTREE}
-      else
-# The argument is a string:
-         _ARG=${_NUM}
-         _WORKTREE_TEST=$(git worktree list | awk '$NF=="['${_ARG}']"{print "'${_ARG}'"}')
-# There is no worktree with that name -> Create one:
-         if [[ "${_WORKTREE_TEST}." == "." ]]; then
-            _WORKTREE=${_ARG}
-            gwa_do ${_WORKTREE}
-            _RET=$?
-            if [[ ${_RET} != 2 ]]; then
-               gw_link ${_WORKTREE}
-            fi
-# There is already a worktree with that name -> Switch to it:
-         else
-            _WORKTREE=${_ARG}
-            cd ../${_WORKTREE}
-            gw_link ${_WORKTREE}
-         fi
-      fi
+   fi
 # An argument was provided and it is a number:
-   elif [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
+   if [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
       _NUM=${_ARG}
       _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
       if [[ "${_WORKTREE}." == "." ]]; then
