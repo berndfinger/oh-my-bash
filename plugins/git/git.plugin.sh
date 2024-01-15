@@ -374,13 +374,13 @@ alias gwtrm='command git worktree remove'
 
 alias gw='git worktree'
 
-# gwbr: Display the local branches and mark the active ones with "<---" at the end of the line. Also add numbers in front
+# gwbr: Display the local branches and mark the active one with "<---" at the end of the line. Also add numbers in front
 #       of each line which has a worktree assigned.
 function gwbr {
    git branch | awk 'NF!=2{printf ("    %s\n", $0)}NF==2{n++; if ($1=="*"){printf ("  %1s %s <---\n", n, $0)}; if ($1!="*"){printf ("  %1s %s\n", n, $0)}}'
 }
 
-# gst  Display git status information from various git commands
+# gst: Display git status information from various git commands
 function gst {
    LESS_SAVE=${LESS}
    unset LESS
@@ -431,7 +431,7 @@ function gst {
 #   $ pwd -P
 #   /home/user01/github/example-repo-2024-01-12/dev
 
-# gwl: List all branches and worktrees. Branches with associated worktrees are displayed with a single digit number
+# gwl: Display all branches and worktrees. Branches with associated worktrees are displayed with a single digit number
 #      in the first column. The current worktree is marked with "<---" at the end of the line.
 function gwl ()
 {
@@ -492,7 +492,7 @@ function gw_link ()
    gwbr
 }
 
-# gwa: Add a new branch and its associated worktree.
+# gwa: Add a new branch and its associated new worktree. This functionality is also part of the gwc function, see below.
 # Attention: Before using the function gwa for adding a new worktree and branch, make sure your dev tree is clean.
 # Unlike when using "git branch -c", modified files will not be part of the new branch. But after creating the new worktree,
 # you can copy files from the initial directory over to the new one.
