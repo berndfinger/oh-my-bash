@@ -489,7 +489,7 @@ function gw_link ()
    echo "Repo link in '$(pwd)' is now set to:"
    ls -l ${_REPO}
    cd ${_WORKTREE}
-   gwbr
+#   gwbr
 }
 
 # gwa: Add a new branch and its associated new worktree. This functionality is also part of the gwc function, see below.
@@ -507,7 +507,26 @@ function gwa ()
    echo "Branches:"
    gwbr
    echo
-   _WORKTREE=$1
+# no argument: no link change, request the worktree
+   if [[ $# == 0 ]]; then
+      _WORKTREE=""
+      _LINK=0
+# one argument: either request the worktree and modify the link, or use $1 for the worktree name and do not modify the link
+   elif [[ $# == 1 ]]; then
+      if [[ ${1}. == "link." ]]; then
+         _WORKTREE=""
+         _LINK=1
+      else
+         _WORKTREE=${1}
+         _LINK=0
+      fi
+# two arguments: $1 for the worktree name and modify the link if the argument is "link"
+   else
+      _WORKTREE=${1}
+      if [[ ${2}. == "link." ]]; then
+         _LINK=1
+      fi
+   fi
    if [[ ${_WORKTREE}. == "." ]]; then
       echo "Enter the name of the worktree to create, based on ${INITIAL_BRANCH} (RETURN or 'q' to quit):"
       read _WORKTREE
@@ -516,9 +535,12 @@ function gwa ()
       gwa_do ${_WORKTREE}
       _RET=$?
       if [[ ${_RET} != 2 ]]; then
-         gw_link ${_WORKTREE}
+         if [[ ${_LINK} -eq 1 ]]; then
+            gw_link ${_WORKTREE}
+         fi
       fi
    fi
+   gwbr
    LESS=${LESS_SAVE}
 }
 
@@ -544,43 +566,63 @@ function gwc ()
    echo "Branches:"
    gwbr
    echo
-   _ARG=$1
-# No argument was provided -> request it:
-   if [[ ${_ARG}. == "." ]]; then
-      echo "Enter number or name of branch to change to, or name of branch to create (RETURN or 'q' to quit):"
-      read _ARG
-      if [[ ${_ARG}. == "." ]] || [[ ${_ARG}. == "q." ]]; then
-         LESS=${LESS_SAVE}
-         return
+# no argument: no link change, request the worktree
+   if [[ $# == 0 ]]; then
+      _WORKTREE_NUMBER_OR_NAME=""
+      _LINK=0
+# one argument: either request the worktree and modify the link, or use $1 for the worktree name and do not modify the link
+   elif [[ $# == 1 ]]; then
+      if [[ ${1}. == "link." ]]; then
+         _WORKTREE_NUMBER_OR_NAME=""
+         _LINK=1
+      else
+         _WORKTREE_NUMBER_OR_NAME=${1}
+         _LINK=0
+      fi
+# two arguments: $1 for the worktree name and modify the link if the argument is "link"
+   else
+      _WORKTREE_NUMBER_OR_NAME=${1}
+      if [[ ${2}. == "link." ]]; then
+         _LINK=1
       fi
    fi
-# An argument was provided and it is a number:
-   if [ ${_ARG} -eq ${_ARG} ] 2>/dev/null; then
-      _NUM=${_ARG}
+
+# _WORKTREE_NUMBER_OR_NAME is empty -> request it:
+   if [[ ${_WORKTREE_NUMBER_OR_NAME}. == "." ]]; then
+      echo "Enter number or name of branch to change to, or name of branch to create (RETURN or 'q' to quit):"
+      read _WORKTREE_NUMBER_OR_NAME
+   fi
+# _WORKTREE_NUMBER_OR_NAME is set and it is a number:
+   if [ ${_WORKTREE_NUMBER_OR_NAME} -eq ${_WORKTREE_NUMBER_OR_NAME} ] 2>/dev/null; then
+      _NUM=${_WORKTREE_NUMBER_OR_NAME}
       _WORKTREE=$(git branch | awk 'NF==2{a++; if (a=='${_NUM}'){print $NF}}')
       if [[ "${_WORKTREE}." == "." ]]; then
          echo "No worktree with number '${_NUM}'. Worktree not changed."
          return
+      else
+         cd ../${_WORKTREE}
       fi
-      gw_link ${_WORKTREE}
-# An argument was provided and it is a string:
+# _WORKTREE_NUMBER_OR_NAME is set and it is a string:
    else
-      _WORKTREE_TEST=$(git worktree list | awk '$NF=="['${_ARG}']"{print "'${_ARG}'"}')
+      _WORKTREE_TEST=$(git worktree list | awk '$NF=="['${_WORKTREE_NUMBER_OR_NAME}']"{print "'${_WORKTREE_NUMBER_OR_NAME}'"}')
 # There is no worktree with that name -> Create one:
       if [[ "${_WORKTREE_TEST}." == "." ]]; then
-         _WORKTREE=${_ARG}
+         _WORKTREE=${_WORKTREE_NUMBER_OR_NAME}
          gwa_do ${_WORKTREE}
          _RET=$?
-         if [[ ${_RET} != 2 ]]; then
-            gw_link ${_WORKTREE}
+         if [[ ${_RET} == 2 ]]; then
+            return
          fi
 # There is already a worktree with that name -> Switch to it:
       else
-         _WORKTREE=${_ARG}
+         _WORKTREE=${_WORKTREE_NUMBER_OR_NAME}
          cd ../${_WORKTREE}
-         gw_link ${_WORKTREE}
       fi
    fi
+   if [[ ${_LINK} -eq 1 ]]; then
+      gw_link ${_WORKTREE}
+   fi
+   gwbr
    LESS=${LESS_SAVE}
 }
 
